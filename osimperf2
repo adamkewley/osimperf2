@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+
+from datetime import date, timedelta
+import logging
+import os
+import subprocess
+import shlex
+import shutil
+from pathlib import Path
+
+def _load_broken_commits():
+    broken_commits_path = "broken-commits.txt"
+
+    # Load broken-commits.txt into a set
+    return {
+        line.strip()
+        for line in Path(broken_commits_path).read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+
+class Config:
+    def __init__(self):
+        self.log_level = logging.INFO
+        self.source_path = Path("opensim-core")
+        self.builds_path = Path("builds")
+        self.installs_path = Path("installs")
+        self.build_type = "Release"
+        self.ignored_commits = _load_broken_commits()
+
+def _date_sample_grid(start, end, mode="monthly"):
+    mode_months = {"annually": [1], "quaterly": list(range(1, 13, 3)), "monthly": list(range(1, 13))}
+
+    dates = []
+    for year in range(start.year, end.year + 1):
+        for month in mode_months[mode]:
+            d = date(year, month, 1)
+            if d <= end:  # don’t go beyond current date
+                dates.append(d)
+    return dates
+
+def _run(args):
+    cmd_str = " ".join(shlex.quote(a) for a in args)
+    logging.info("running %s", cmd_str)
+    return subprocess.run(args, check=True)
+
+def _commit_for(config, date):
+    proc = subprocess.run(["git", "-C", str(config.source_path), "rev-list", "-10", f"--before={date}T09:00:00Z", "main"], check=True, capture_output=True, text=True)
+    commits = [l for line in proc.stdout.splitlines() if (l := line.strip()) not in config.ignored_commits]
+    if not commits:
+        raise RuntimeError(f"No suitable commit found  before {date}: all nearby commits are broken")
+    return commits[0]
+
+def _build_first_commit_before(config, date):
+    commit = _commit_for(config, date)
+    
+    commit_build_path = config.builds_path / commit
+    commit_install_path = config.installs_path / commit
+    commit_success_path = commit_install_path / "success"
+
+    assert os.path.commonpath([commit_build_path.resolve(), commit_install_path.resolve()]) != str(commit_build_path.resolve())
+
+    if not commit_success_path.exists():
+        # Ensure builds/ directory exists
+        config.builds_path.mkdir(parents=True, exist_ok=True)
+
+        # Checkout commit
+        logging.info("%s requires building, building it", commit)
+        logging.info("checking out %s", commit)
+        _run(["git", "-C", str(config.source_path), "checkout", commit])
+
+        # Configure + build dependencies
+        dependency_build_path = commit_build_path / "dependencies-build"
+        dependency_install_path = commit_build_path / "dependencies-install"
+        logging.info("building %s's dependencies to %s", commit, dependency_build_path)
+        _run([
+            "cmake",
+            "-S", str(config.source_path / "dependencies"),
+            "-B", str(dependency_build_path.resolve()),
+            "-G", "Ninja",
+            f"-DCMAKE_INSTALL_PREFIX={dependency_install_path.resolve()}",
+            f"-DCMAKE_BUILD_TYPE={config.build_type}",
+            "-DOPENSIM_WITH_CASADI=OFF",
+            "-DOPENSIM_WITH_TROPTER=OFF",
+            "-DSUPERBUILD_docopt=OFF",
+            "-DSUPERBUILD_BTK=OFF",
+            "-DSUPERBUILD_ipopt=OFF",
+            "-DSUPERBUILD_adolc=OFF",
+            "-DSUPERBUILD_casadi=OFF",
+        ])
+        _run([
+            "cmake",
+            "--build", str(dependency_build_path.resolve())
+        ])
+       
+        # Configure + build + install OpenSim
+        main_build_path = commit_build_path / "main-build"
+        logging.info("building %s in %s", commit, main_build_path)
+        _run([
+            "cmake",
+            "-S", str(config.source_path),
+            "-B", str(main_build_path.resolve()),
+            "-G", "Ninja",
+            f"-DCMAKE_INSTALL_PREFIX={commit_install_path.resolve()}",
+            "-DBUILD_JAVA_WRAPPING=OFF",
+            "-DBUILD_PYTHON_WRAPPING=OFF",
+            f"-DCMAKE_BUILD_TYPE={config.build_type}",
+            "-DOPENSIM_DISABLE_LOG_FILE=ON",
+            "-DOPENSIM_WITH_CASADI=OFF",
+            "-DOPENSIM_WITH_TROPTER=OFF",
+            "-DOPENSIM_COPY_DEPENDENCIES=ON",
+            f"-DOPENSIM_DEPENDENCIES_DIR={dependency_install_path.resolve()}",
+            "-DBUILD_API_ONLY=ON",
+            "-DBUILD_TESTING=OFF",
+            "-DBUILD_API_EXAMPLES=OFF",
+            "-DOPENSIM_WITH_MOCO=OFF",
+        ])
+        _run([
+            "cmake",
+            "--build", str(main_build_path.resolve()),
+            "--target", "install"
+        ])
+
+        # Mark completion of the installation
+        logging.info("creating %s", commit_success_path)
+        commit_success_path.touch()
+
+        # Clean out build directory (it's installed)
+        logging.info("cleaning out %s", commit_build_path)
+        shutil.rmtree(commit_build_path)
+    else:
+        logging.info("%s is already built, skipping", commit)
+
+def main():
+    config = Config()
+    logging.basicConfig(level=config.log_level)
+
+    end = date.today()
+    start = date(end.year - 8, end.month, end.day)
+    for d in _date_sample_grid(start, end):
+        _build_first_commit_before(config, d)
+
+if __name__ == "__main__":
+    main()
+
