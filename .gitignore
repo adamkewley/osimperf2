@@ -1,4 +1,5 @@
-# osimperf builds/writes these (by default)
-installs/
+# osimperf builds/writes/edits these (by default)
+opensim-core/
+opensim-core_installs/
 builds/
 

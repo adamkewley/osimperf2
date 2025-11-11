@@ -1,0 +1,29 @@
+#!/bin/bash
+set -eo pipefail
+
+WORKSPACE=$(dirname $(realpath "$0"))
+
+echo "Setup Arm26 benchmark at $WORKSPACE"
+
+models_dir=$(realpath $WORKSPACE/../../opensim-models)
+echo "Copy models from $models_dir"
+
+cp -r $models_dir/Geometry $WORKSPACE/Geometry
+for model in $(find $WORKSPACE -name arm26.osim); do
+	echo "Replace Thelen2003Muscle by Millard2012EquilibriumMuscle in $model"
+	sed -i -e s/'Thelen2003Muscle'/'Millard2012EquilibriumMuscle'/g $model
+done
+
+binary=ToolPerf
+results=$WORKSPACE/benchmark-result_Arm26FWD.csv
+log=$WORKSPACE/log.txt
+
+echo "running Arm26FWD Run..."
+env -C $WORKSPACE $binary --model arm26.osim --out $results \
+	--run 10 \
+	>> $log
+
+echo "... done! Completed BenchmarkArm26FWD."
+echo "Log: $log"
+echo "Results: $results"
+echo ""

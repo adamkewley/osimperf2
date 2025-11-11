@@ -1,0 +1,36 @@
+#!/bin/bash
+set -eo pipefail
+
+WORKSPACE=$(dirname $(realpath "$0"))
+
+echo "Setup Arm26 benchmark at $WORKSPACE"
+
+models_dir=$(realpath $WORKSPACE/../../opensim-models)
+echo "--> Copy models from $models_dir"
+
+cp -r $models_dir/Tutorials/Computed_Muscle_Control/. $WORKSPACE/.
+
+for model in $(find $WORKSPACE -name arm26.osim); do
+	echo "Replace Thelen2003Muscle by Millard2012EquilibriumMuscle in $model"
+	sed -i -e s/'Thelen2003Muscle'/'Millard2012EquilibriumMuscle'/g $model
+done
+
+binary=ToolPerf
+results=$WORKSPACE/benchmark-result_Arm26.csv
+log=$WORKSPACE/log.txt
+
+cp $WORKSPACE/OutputReference/InverseKinematics/arm26_InverseKinematics.mot $WORKSPACE/OutputReference/ComputedMuscleControl/arm26_InverseKinematics.mot
+cp $WORKSPACE/OutputReference/arm26.osim $WORKSPACE/OutputReference/ComputedMuscleControl/arm26.osim
+cp -r $models_dir/Geometry $WORKSPACE/OutputReference/ComputedMuscleControl/Geometry
+rm -r $WORKSPACE/OutputReference/ComputedMuscleControl/Results
+
+echo "Running Arm26 CMC..."
+
+env -C $WORKSPACE/OutputReference/ComputedMuscleControl $binary --model arm26.osim --out $results \
+	--cmc arm26_Setup_ComputedMuscleControl.xml \
+	>> $log
+
+echo "... done! Completed benchmark Arm26 CMC."
+echo "Log: $log"
+echo "Results: $results"
+echo ""

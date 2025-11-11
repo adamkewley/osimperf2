@@ -1,0 +1,24 @@
+#!/bin/bash
+set -eo pipefail
+
+WORKSPACE=$(dirname $(realpath "$0"))
+
+echo "Setup Arm26 benchmark at $WORKSPACE"
+
+models_dir=$(realpath $WORKSPACE/../../opensim-models)
+echo "Copy models from $models_dir"
+
+cp -r $models_dir/Geometry $WORKSPACE/Geometry
+
+binary=BenchmarkArm26
+results=$WORKSPACE/benchmark-result_RajagopalDrop.csv
+log=$WORKSPACE/log.txt
+
+echo "Run RajagopalDrop model"
+
+# PATH=$(cat path.txt) LD_LIBRARY_PATH=$(cat ld_library_path.txt) \
+# 	$binary --model Rajagopal2016.osim --out $results --run "2" --viz
+
+PATH=$(cat path.txt) LD_LIBRARY_PATH=$(cat ld_library_path.txt) \
+	valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes --cache-sim=yes --branch-sim=yes --callgrind-out-file="$WORKSPACE/RajagopalDrop-grind.out" \
+	$binary --model Rajagopal2016.osim --out $results --run "2"

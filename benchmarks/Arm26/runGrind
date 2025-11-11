@@ -1,0 +1,35 @@
+#!/bin/bash
+set -eo pipefail
+
+# This script is just a sketch of some analyses that might be done after installing and running the benchmarks.
+
+WORKSPACE=$(dirname $(realpath "$0"))
+
+export LD_LIBRARY_PATH=$(cat $WORKSPACE/ld_library_path.txt)
+export PATH=$(cat $WORKSPACE/path.txt)
+
+# env -C $WORKSPACE/OutputReference \
+# 	valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes --cache-sim=yes --branch-sim=yes --callgrind-out-file="$WORKSPACE/Arm26-grind.out" \
+# 	$binary --model arm26.osim --out $results --run 1
+
+models_dir=$(realpath $WORKSPACE/../../opensim-models)
+cp -r $models_dir/Geometry $WORKSPACE/Geometry
+env -C $WORKSPACE BenchmarkArm26 --model arm26.osim --out runGrindResult.csv --run 10
+# env -C $WORKSPACE/OutputReference/ComputedMuscleControl opensim-cmd viz model arm26.osim Results/arm26_states.sto
+
+# env -C $WORKSPACE/OutputReference/ComputedMuscleControl/opensim-cmd-01 \
+# 	ffmpeg -framerate 20 -i Frame%04d.png -c:v libx264 -r 30 -pix_fmt yuv420p out.mp4
+
+# echo "export PATH=$PATH" > runPerf
+# echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> runPerf
+# echo "" >> runPerf
+# echo "env -C $WORKSPACE/OutputReference/ComputedMuscleControl \\" >> runPerf
+# echo "    perf record -g \\" >> runPerf
+# echo "    -a --call-graph dwarf \\" >> runPerf
+# echo "    -e sched:sched_switch \\" >> runPerf
+# echo "    $(which $binary) --model arm26.osim \\" >> runPerf
+# echo "    --out $WORKSPACE/perfResults \\" >> runPerf
+# echo "    --cmc arm26_Setup_ComputedMuscleControl.xml" >> runPerf
+# echo "mv $(find . -name perf.data) perf.data"
+# echo "perf script > out.perf"
+# echo "perf report"

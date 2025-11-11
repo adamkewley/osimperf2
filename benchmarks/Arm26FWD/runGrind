@@ -1,0 +1,31 @@
+#!/bin/bash
+set -eo pipefail
+
+WORKSPACE=$(dirname $(realpath "$0"))
+
+export LD_LIBRARY_PATH=$(cat $WORKSPACE/ld_library_path.txt)
+export PATH=$(cat $WORKSPACE/path.txt)
+
+models_dir=$(realpath $WORKSPACE/../../opensim-models)
+binary=BenchmarkArm26
+results=$WORKSPACE/benchmark-result_Arm26FWD-grind.csv
+
+# env -C $WORKSPACE \
+# 	$binary --model arm26.osim --out $results --run 10 --viz
+
+env -C $WORKSPACE \
+	valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes --cache-sim=yes --branch-sim=yes --callgrind-out-file="$WORKSPACE/Arm26-grind.out" \
+	$binary --model arm26.osim --out $results --run 10
+
+echo "Grind complete"
+echo results at $results
+cat $results
+echo
+
+# models_dir=$(realpath $WORKSPACE/../../opensim-models)
+# cp -r $models_dir/Geometry $WORKSPACE/Geometry
+# env -C $WORKSPACE BenchmarkArm26 --model arm26.osim --out runGrindResult.csv --run 10
+# env -C $WORKSPACE/OutputReference/ComputedMuscleControl opensim-cmd viz model arm26.osim Results/arm26_states.sto
+
+# env -C $WORKSPACE/OutputReference/ComputedMuscleControl/opensim-cmd-01 \
+# 	ffmpeg -framerate 20 -i Frame%04d.png -c:v libx264 -r 30 -pix_fmt yuv420p out.mp4

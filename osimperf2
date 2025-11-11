@@ -7,6 +7,7 @@ import subprocess
 import shlex
 import shutil
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 def _load_broken_commits():
     broken_commits_path = "broken-commits.txt"
@@ -23,7 +24,8 @@ class Config:
         self.log_level = logging.INFO
         self.source_path = Path("opensim-core")
         self.builds_path = Path("builds")
-        self.installs_path = Path("installs")
+        self.installs_path = Path("opensim-core_installs")
+        self.runner_source_path = Path("osimperf2-runner.cpp")
         self.build_type = "Release"
         self.ignored_commits = _load_broken_commits()
 
@@ -50,16 +52,58 @@ def _commit_for(config, date):
         raise RuntimeError(f"No suitable commit found  before {date}: all nearby commits are broken")
     return commits[0]
 
+def _build_runner_for(config, commit):
+    commit_build_path = config.builds_path / commit
+    commit_install_path = config.installs_path / commit
+    runner_path = commit_install_path / "bin" / "osimperf2-runner"
+
+    build_runner = False
+    if not runner_path.exists():
+        logging.info("%s does not exist: building", runner_path)
+        build_runner = True
+    elif runner_path.stat().st_mtime < config.runner_source_path.stat().st_mtime:
+        logging.info("%s is older than %s: rebuilding", runner_path, config.runner_source_path)
+        build_runner = True
+
+    if build_runner:
+        runner_build_path = commit_build_path / "runner-build"
+        _run([
+            "cmake",
+            "-G", "Ninja",
+            "-S", ".",
+            "-B", str(runner_build_path.resolve()),
+            f"-DCMAKE_PREFIX_PATH={commit_install_path.resolve()}",
+            f"-DCMAKE_INSTALL_PREFIX={commit_install_path.resolve()}",
+            f"-DCMAKE_BUILD_TYPE={config.build_type}"
+        ])
+        _run([
+            "cmake",
+            "--build", str(runner_build_path.resolve()),
+            "--target", "install"
+        ])
+        logging.info("cleaning up build dir %s", runner_build_path)
+        shutil.rmtree(runner_build_path)
+        logging.info("built runner at %s", runner_path)
+
+def _build_runners_for(config, commits):
+    # The reason this is separate from the general "build opensim" step
+    # is because the runners are more likely to change in-tree but are
+    # only one source file, so can be parallelized more easily.
+    with ThreadPoolExecutor() as executor:
+        task_iterator = executor.map(_build_runner_for, [config for _ in commits], commits)
+        list(task_iterator)
+
 def _build_first_commit_before(config, date):
     commit = _commit_for(config, date)
     
     commit_build_path = config.builds_path / commit
     commit_install_path = config.installs_path / commit
-    commit_success_path = commit_install_path / "success"
+    runner_path = commit_install_path / "bin" / "osimperf2-runner"
 
     assert os.path.commonpath([commit_build_path.resolve(), commit_install_path.resolve()]) != str(commit_build_path.resolve())
 
-    if not commit_success_path.exists():
+    # Check, configure, build, and install the opensim-core API (if necessary)
+    if not commit_install_path.exists():
         # Ensure builds/ directory exists
         config.builds_path.mkdir(parents=True, exist_ok=True)
 
@@ -120,15 +164,25 @@ def _build_first_commit_before(config, date):
             "--target", "install"
         ])
 
-        # Mark completion of the installation
-        logging.info("creating %s", commit_success_path)
-        commit_success_path.touch()
+        # Create bin/ install directory (some legacy opensim-core cmake files break otherwise)
+        (commit_install_path / "bin").touch()
+
+        # Patch headers that contain stuff that isn't compatible with modern C++
+        broken_header = commit_install_path / "include/OpenSim/Common/PropertySet.h"
+        if broken_header.exists():
+            content = broken_header.read_text()
+            patched_content = content.replace(") throw (Exception)", ")")
+            if patched_content != content:
+                logging.info(f"patching checked exceptions out of {broken_header}")
+                broken_header.write_text(patched_content)
 
         # Clean out build directory (it's installed)
         logging.info("cleaning out %s", commit_build_path)
         shutil.rmtree(commit_build_path)
     else:
-        logging.info("%s is already built, skipping", commit)
+        logging.info("%s opensim-core is already built, skipping", commit)
+
+    return commit
 
 def main():
     config = Config()
@@ -136,8 +190,10 @@ def main():
 
     end = date.today()
     start = date(end.year - 8, end.month, end.day)
+    commits = []
     for d in _date_sample_grid(start, end):
-        _build_first_commit_before(config, d)
+        commits.append(_build_first_commit_before(config, d))
+    _build_runners_for(config, commits)
 
 if __name__ == "__main__":
     main()
