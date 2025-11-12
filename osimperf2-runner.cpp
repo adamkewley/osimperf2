@@ -177,7 +177,10 @@ int main(int argc, char* argv[]) {
     std::cout << "RESULTS:\n";
     std::cout << "--> dt = " << dseconds << "\n";
 
-    // TODO: output dseconds to somewhere sane
+    if (not out.empty()) {
+        std::ofstream fout(out);
+        fout << dseconds;
+    }
 
     return 0;
 }

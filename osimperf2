@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import argparse
+from tempfile import TemporaryDirectory
 
 def _load_broken_commits():
     broken_commits_path = "broken-commits.txt"
@@ -182,11 +183,19 @@ def _build_commit(config, commit):
     else:
         logging.info("%s opensim-core is already built, skipping", commit)
 
-def build_all(config):
+def _all_sample_dates(config):
     end = date.today()
     start = date(end.year - 8, end.month, end.day)
+    return _date_sample_grid(start, end)
+
+def all_commits(config):
+    for date in _all_sample_dates(config):
+        commit = _commit_for(config, date)
+        print(commit)
+
+def build_all(config):
     commits = []
-    for d in _date_sample_grid(start, end):
+    for d in _all_sample_dates(config):
         commit = _commit_for(config, d)
         _build_commit(config, commit)
         commits.append(commit)
@@ -196,8 +205,34 @@ def build(config, commit):
     _build_commit(config, commit)
     _build_runners_for(config, [commit])
 
-def measure(config, commit, benchmark_name):
-    logging.info("TODO implementation")
+def measure(config, commit):
+    runner_path = config.installs_path / commit / "bin" / "osimperf2-runner"
+
+    with TemporaryDirectory() as td:
+        logging.info("Workflow directory %s", td)
+        result_file = Path(td) / "result.txt"
+        args = [
+            str(runner_path.resolve()),
+            "--model",
+            str(Path("benchmarks/Arm26FWD/arm26.osim").resolve()),
+            "--out",
+            str(result_file.resolve()),
+            "--run",
+            "10"
+        ]
+        out = subprocess.run(args, capture_output=True, check=True)
+        dt = float(result_file.read_text())
+        print(f"{dt}")
+        logging.info("dt = %s", dt)
+        return dt
+
+def update_measurements(config, analysis_csv):
+    assert False, "Implementation TODO!"
+    # - read analysis_csv into memory
+    # - figure out which analyses haven't been done yet
+    # - do them (randomized)
+    # - append to analysis csv
+    pass
 
 def main():
     config = Config()
@@ -206,25 +241,31 @@ def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("build-all")  # no args
+    subparsers.add_parser("all-commits")          # no args
+    subparsers.add_parser("build-all")            # no args
+    
+    update_measurements_parser = subparsers.add_parser("update-measurements")
+    update_measurements_parser.add_argument("measurements_csv")
 
     build_parser = subparsers.add_parser("build")
     build_parser.add_argument("commit")
 
     measure_parser = subparsers.add_parser("measure")
     measure_parser.add_argument("commit")
-    measure_parser.add_argument("benchmark_name")
 
     args = parser.parse_args()
-    if args.command == "build-all":
+    if args.command == "all-commits":
+        all_commits(config)
+    elif args.command == "build-all":
         build_all(config)
+    elif args.command == "update-measurements":
+        update_measurements(config, args.measurements_csv)
     elif args.command == "build":
         build(config, args.commit)
     elif args.command == "measure":
-        measure(config, args.commit, args.benchmark_name)
+        measure(config, args.commit)
     else:
         raise RuntimeError("unhandled command detected: probably a developer's fault!")
 
 if __name__ == "__main__":
     main()
-
