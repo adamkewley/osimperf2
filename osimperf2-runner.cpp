@@ -146,36 +146,36 @@ Real runToolFwd(Timer& timer, const std::string& modelFile, const std::string& t
 SimTK::Real runAndTime(
         Timer& timer,
         const std::string& modelFile, bool visualize, SimTK::Real finalTime) {
-    return 0.0;  // TODO
-    /*
 
     printHeader("Run Integrator", std::cout);
 
     Model model(modelFile);
-
     model.setUseVisualizer(visualize);
     SimTK::State& s = model.initSystem();
-
     s.setTime(0.);
     model.realizeReport(s);
 
-    Manager manager(model);
-    manager.initialize(s);
+    SimTK::RungeKuttaMersonIntegrator integrator(model.getSystem());
+    integrator.setInternalStepLimit(20000);
+    integrator.setMinimumStepSize(1.0e-8    );
+    integrator.setMaximumStepSize(1.0);
+    integrator.setAccuracy(1.0e-5);
+    integrator.setFinalTime(finalTime);
+    // integrator.setReturnEveryInternalStep(true);  // so that cancellations/interrupts work
+    integrator.initialize(s);
 
-    const std::string label = model.getName() + "_run";
-    const Real dt =
-            timer.measureDuration(
-                    label,
-                    [&]() { manager.integrate(finalTime); });
+    SimTK::TimeStepper stepper{model.getSystem(), integrator};
+    stepper.initialize(s);
+    // stepper.setReportAllSignificantStates(true);  // so that cancellations/interrupts work
 
+    const Real dt = timer.measureDuration(
+        model.getName() + "_run",
+        [&]() { stepper.stepTo(finalTime); });
     std::flush(std::cout);
-
-//    if ((finalTime - manager.getState().getTime()) > 1e-13) {
-//        throw std::runtime_error("did not reach final time");
-//    }
-
+    if (not integrator.isSimulationOver()) {
+        throw std::runtime_error("did not reach final time");
+    }
     return dt;
-    */
 }
 
 int main(int argc, char* argv[]) {
