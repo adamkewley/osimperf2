@@ -9,7 +9,7 @@ include(GNUInstallDirs)  # CMAKE_INSTALL_BINDIR
 
 find_package(OpenSim REQUIRED)
 
-set(CMAKE_INSTALL_RPATH "../lib")
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH OFF)
 
 add_executable(osimperf2-runner osimperf2-runner.cpp)

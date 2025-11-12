@@ -182,7 +182,7 @@ def _build_commit(config, commit):
     else:
         logging.info("%s opensim-core is already built, skipping", commit)
 
-def _cmd_build_all(config):
+def build_all(config):
     end = date.today()
     start = date(end.year - 8, end.month, end.day)
     commits = []
@@ -192,9 +192,12 @@ def _cmd_build_all(config):
         commits.append(commit)
     _build_runners_for(config, commits)
 
-def _cmd_build(config, commit):
+def build(config, commit):
     _build_commit(config, commit)
     _build_runners_for(config, [commit])
+
+def measure(config, commit, benchmark_name):
+    logging.info("TODO implementation")
 
 def main():
     config = Config()
@@ -203,16 +206,24 @@ def main():
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    build_all_parser = subparsers.add_parser("build-all")
+    subparsers.add_parser("build-all")  # no args
 
     build_parser = subparsers.add_parser("build")
     build_parser.add_argument("commit")
 
+    measure_parser = subparsers.add_parser("measure")
+    measure_parser.add_argument("commit")
+    measure_parser.add_argument("benchmark_name")
+
     args = parser.parse_args()
     if args.command == "build-all":
-        _cmd_build_all(config)
-    if args.command == "build":
-        _cmd_build(config, args.commit)
+        build_all(config)
+    elif args.command == "build":
+        build(config, args.commit)
+    elif args.command == "measure":
+        measure(config, args.commit, args.benchmark_name)
+    else:
+        raise RuntimeError("unhandled command detected: probably a developer's fault!")
 
 if __name__ == "__main__":
     main()

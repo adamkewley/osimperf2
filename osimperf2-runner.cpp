@@ -171,10 +171,11 @@ SimTK::Real runAndTime(
     const Real dt = timer.measureDuration(
         model.getName() + "_run",
         [&]() { stepper.stepTo(finalTime); });
-    std::flush(std::cout);
-    if (not integrator.isSimulationOver()) {
+    const Real finalIntegratorTime = integrator.getTime();
+    if (finalIntegratorTime < finalTime) {
         throw std::runtime_error("did not reach final time");
     }
+    std::flush(std::cout);
     return dt;
 }
 
