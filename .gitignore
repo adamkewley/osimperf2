@@ -3,3 +3,8 @@ opensim-core/
 opensim-core_installs/
 builds/
 
+# Python conventions
+.venv/
+
+# CLion
+.idea/

@@ -1,0 +1,9 @@
+git
+freeglut3-dev
+libxi-dev
+libxmu-dev
+liblapack-dev
+wget
+build-essential
+cmake
+python3

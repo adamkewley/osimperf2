@@ -1,14 +1,8 @@
-#if defined(__GNUC__)
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wdeprecated"
-#endif
-    #include <OpenSim/Analyses/StaticOptimization.h>
-    #include <OpenSim/OpenSim.h>
-    #include <OpenSim/Simulation/StatesTrajectory.h>
-    #include <OpenSim/Tools/CMCTool.h>
-#if defined(__GNUC__)
-    #pragma GCC diagnostic pop
-#endif
+#include <OpenSim/Analyses/StaticOptimization.h>
+#include <OpenSim/OpenSim.h>
+#include <OpenSim/Simulation/StatesTrajectory.h>
+#include <OpenSim/Tools/CMCTool.h>
+
 #include <cstdio>
 #include <fstream>
 #include <ostream>
@@ -149,10 +143,11 @@ Real runToolFwd(Timer& timer, const std::string& modelFile, const std::string& t
     return dt;
 }
 
-/*
 SimTK::Real runAndTime(
         Timer& timer,
         const std::string& modelFile, bool visualize, SimTK::Real finalTime) {
+    return 0.0;  // TODO
+    /*
 
     printHeader("Run Integrator", std::cout);
 
@@ -180,8 +175,8 @@ SimTK::Real runAndTime(
 //    }
 
     return dt;
+    */
 }
-*/
 
 int main(int argc, char* argv[]) {
     std::vector<std::string> args(argv + 1, argv + argc);
@@ -223,10 +218,10 @@ int main(int argc, char* argv[]) {
     Timer timer;
 
     if (run) {
-        // SimTK::Real dt = runAndTime(timer, model, visualize, simTime);  // TODO
+        SimTK::Real dt = runAndTime(timer, model, visualize, simTime);
 
-        // std::cout << "RESULTS:\n";
-        // std::cout << "--> dt = " << dt << "\n";
+        std::cout << "RESULTS:\n";
+        std::cout << "--> dt = " << dt << "\n";
     }
 
     if (!cmc.empty()) {

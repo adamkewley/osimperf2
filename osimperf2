@@ -8,6 +8,7 @@ import shlex
 import shutil
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+import argparse
 
 def _load_broken_commits():
     broken_commits_path = "broken-commits.txt"
@@ -46,6 +47,7 @@ def _run(args):
     return subprocess.run(args, check=True)
 
 def _commit_for(config, date):
+    assert config.source_path.exists(), f"{config.source_path}: does not exist, cannot read git history"
     proc = subprocess.run(["git", "-C", str(config.source_path), "rev-list", "-10", f"--before={date}T09:00:00Z", "main"], check=True, capture_output=True, text=True)
     commits = [l for line in proc.stdout.splitlines() if (l := line.strip()) not in config.ignored_commits]
     if not commits:
@@ -93,9 +95,7 @@ def _build_runners_for(config, commits):
         task_iterator = executor.map(_build_runner_for, [config for _ in commits], commits)
         list(task_iterator)
 
-def _build_first_commit_before(config, date):
-    commit = _commit_for(config, date)
-    
+def _build_commit(config, commit): 
     commit_build_path = config.builds_path / commit
     commit_install_path = config.installs_path / commit
     runner_path = commit_install_path / "bin" / "osimperf2-runner"
@@ -182,18 +182,37 @@ def _build_first_commit_before(config, date):
     else:
         logging.info("%s opensim-core is already built, skipping", commit)
 
-    return commit
+def _cmd_build_all(config):
+    end = date.today()
+    start = date(end.year - 8, end.month, end.day)
+    commits = []
+    for d in _date_sample_grid(start, end):
+        commit = _commit_for(config, d)
+        _build_commit(config, commit)
+        commits.append(commit)
+    _build_runners_for(config, commits)
+
+def _cmd_build(config, commit):
+    _build_commit(config, commit)
+    _build_runners_for(config, [commit])
 
 def main():
     config = Config()
     logging.basicConfig(level=config.log_level)
 
-    end = date.today()
-    start = date(end.year - 8, end.month, end.day)
-    commits = []
-    for d in _date_sample_grid(start, end):
-        commits.append(_build_first_commit_before(config, d))
-    _build_runners_for(config, commits)
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    build_all_parser = subparsers.add_parser("build-all")
+
+    build_parser = subparsers.add_parser("build")
+    build_parser.add_argument("commit")
+
+    args = parser.parse_args()
+    if args.command == "build-all":
+        _cmd_build_all(config)
+    if args.command == "build":
+        _cmd_build(config, args.commit)
 
 if __name__ == "__main__":
     main()

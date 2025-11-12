@@ -1,0 +1,24 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "osimperf2-RelWithDebInfo",
+            "displayName": "osimperf2-RelWithDebInfo",
+            "description": "Default configure preset for IDE users (you might want to edit CMAKE_PREFIX_PATH, though)",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/RelWithDebInfo",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CMAKE_PREFIX_PATH": "${sourceDir}/opensim-core_installs/009995b446fc50aad6768d88db9c0e6c8217f07e"
+            },
+            "hidden": false
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "osimperf2-RelWithDebInfo",
+            "configurePreset": "osimperf2-RelWithDebInfo"
+        }
+    ]
+}
+
