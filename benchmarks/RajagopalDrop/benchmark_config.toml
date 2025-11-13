@@ -1,0 +1,5 @@
+type = "run"
+
+[run]
+model = "Rajagopal2016.osim"
+end_time = 2

@@ -1,0 +1,20 @@
+# Paths to install directories of opensim-core (+ osimperf2-runner) that
+# should be measured. Globs (e.g. dir/*) are expanded.
+#
+# Each directory must contain a built `osimperf2-runner` at `$dir/bin/osimperf2-runner`
+commits = ["opensim-core_installs/*"]
+
+# A list of benchmarks that should be analyzed against each commit
+# in `commits`
+benchmarks = ["benchmarks/RajagopalDrop"]
+
+# How many times should a measurement (i.e. a `(commit, benchmark)`
+# combination should be repeated.
+repeats = 8
+
+# Path to the results CSV file
+#
+# Note: the results file is _updated_ by a single `full-analysis` run, so if
+# a measurement is already in the results CSV it won't measure it (clean it out
+# if you want new measurements
+result_csv = "full_analysis_results.csv"

@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-
-from datetime import date, timedelta
+import csv
+import glob
+import pprint
+import tomllib
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta, datetime, timezone, tzinfo
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import argparse
 import logging
 import os
-import subprocess
 import shlex
 import shutil
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
-import argparse
-from tempfile import TemporaryDirectory
+import subprocess
+import random
 
 def _load_broken_commits():
     broken_commits_path = "broken-commits.txt"
@@ -30,6 +34,140 @@ class Config:
         self.runner_source_path = Path("osimperf2-runner.cpp")
         self.build_type = "Release"
         self.ignored_commits = _load_broken_commits()
+
+# Runs a "--run" type of benchmark
+class RunBenchmarkRunner:
+    @staticmethod
+    def load_from_dict(benchmark_directory, d):
+        assert d["type"] == "run", "only 'run' benchmarks currently supported"
+
+        name = benchmark_directory.name
+        model_path = (benchmark_directory / d["run"]["model"])
+        end_time = d["run"]["end_time"]
+
+        return RunBenchmarkRunner(name, model_path, end_time)
+
+    def __init__(self, name, model_path : Path, end_time : float):
+        assert model_path.exists()
+        assert end_time > 0
+
+        self.name = name
+        self.model_path = model_path
+        self.end_time = end_time
+
+    def __repr__(self):
+        return pprint.pformat(vars(self))
+
+    def run(self, osimperf2_exe_path : Path):
+        with TemporaryDirectory() as td:
+            logging.info("Workflow directory %s", td)
+            result_file = Path(td) / "result.txt"
+            args = [
+                str(osimperf2_exe_path.resolve()),
+                "--model",
+                str(self.model_path),
+                "--out",
+                str(result_file.resolve()),
+                "--run",
+                str(self.end_time)
+            ]
+
+            # Add the `lib/` to `LD_LIBRARY_PATH`, because some builds of
+            # OpenSim do not handle Lepton linkage correctly
+            env = os.environ.copy()
+            env["LD_LIBRARY_PATH"] = f"{osimperf2_exe_path.parent.parent / 'lib'}:{env.get('LD_LIBRARY_PATH', '')}"
+            out = subprocess.run(args, capture_output=True, env=env)
+            if out.returncode != 0:
+                logging.error(f"Error running {' '.join(shlex.quote(a) for a in args)}")
+                logging.error("stdout: %s", out.stderr)
+                logging.error("stderr: %s", out.stderr)
+                raise RuntimeError("Error running measurement")
+
+            return float(result_file.read_text())
+
+class CommitDateLut:
+    def __init__(self):
+        self._lut = {}
+
+    def lookup(self, config : Config, commit):
+        if commit in self._lut:
+            return self._lut[commit]
+        else:
+            unix_timestamp_str = subprocess.check_output(["git", "-C", config.source_path, "show", "-s", "--format=%ct", commit]).strip()
+            unix_timestamp = int(unix_timestamp_str)
+            return datetime.fromtimestamp(unix_timestamp, tz=timezone.utc)
+
+class RunnableCommit:
+    def __init__(self, commit_time : datetime, commit : str, runner_path : Path):
+        self.commit_time = commit_time
+        self.commit = commit
+        self.runner_path = runner_path
+
+    def __repr__(self):
+        return pprint.pformat(vars(self))
+
+class AnalysisMeasurement:
+
+    def __init__(
+            self,
+            measurement_time : datetime,
+            commit : str,
+            commit_time : datetime,
+            benchmark_name : str,
+            repeat_number : int,
+            runtime : float):
+        self.measurement_time = measurement_time
+        self.commit = commit
+        self.commit_time = commit_time
+        self.benchmark_name = benchmark_name
+        self.repeat_number = repeat_number
+        self.runtime = runtime
+
+    def __repr__(self):
+        return pprint.pformat(vars(self))
+
+    def to_string_dict(self):
+        # measurement_time,commit,commit_time,benchmark_name,repeat_number, runtime
+        return {
+            "measurement_time": str(int(self.measurement_time.timestamp())),
+            "commit": self.commit,
+            "commit_time": str(int(self.commit_time.timestamp())),
+            "benchmark_name": self.benchmark_name,
+            "repeat_number": str(self.repeat_number),
+            "runtime": str(self.runtime),
+        }
+
+class AnalysisPlannedMeasurement:
+
+    def __init__(
+            self,
+            commit : RunnableCommit,
+            benchmark_runner : RunBenchmarkRunner,
+            repeat : int):
+        self.commit = commit
+        self.benchmark_runner = benchmark_runner
+        self.run_id = repeat
+
+    def __repr__(self):
+        return pprint.pformat(vars(self))
+
+    def run(self):
+        measurement_time = datetime.now(timezone.utc)
+        dt = self.benchmark_runner.run(self.commit.runner_path)
+        return AnalysisMeasurement(
+            measurement_time,
+            self.commit.commit,
+            self.commit.commit_time,
+            self.benchmark_runner.name,
+            self.run_id,
+            dt
+        )
+
+def _load_runner_from_benchmark_config(benchmark_config_toml):
+    with open(benchmark_config_toml, "rb") as f:
+        benchmark_config = tomllib.load(f)
+    assert benchmark_config["type"] == "run", "only 'run' benchmarks currently supported"
+    return RunBenchmarkRunner.load_from_dict(benchmark_config_toml.parent, benchmark_config)
 
 def _date_sample_grid(start, end, mode="monthly"):
     mode_months = {"annually": [1], "quaterly": list(range(1, 13, 3)), "monthly": list(range(1, 13))}
@@ -136,7 +274,7 @@ def _build_commit(config, commit):
             "cmake",
             "--build", str(dependency_build_path.resolve())
         ])
-       
+
         # Configure + build + install OpenSim
         main_build_path = commit_build_path / "main-build"
         logging.info("building %s in %s", commit, main_build_path)
@@ -205,34 +343,110 @@ def build(config, commit):
     _build_commit(config, commit)
     _build_runners_for(config, [commit])
 
-def measure(config, commit):
+def measure(config, commit, benchmark_name):
     runner_path = config.installs_path / commit / "bin" / "osimperf2-runner"
+    assert runner_path.exists(), f"{runner_path}: does not exist, has `osimperf2-runner` been built for this commit?"
 
-    with TemporaryDirectory() as td:
-        logging.info("Workflow directory %s", td)
-        result_file = Path(td) / "result.txt"
-        args = [
-            str(runner_path.resolve()),
-            "--model",
-            str(Path("benchmarks/Arm26FWD/arm26.osim").resolve()),
-            "--out",
-            str(result_file.resolve()),
-            "--run",
-            "10"
-        ]
-        out = subprocess.run(args, capture_output=True, check=True)
-        dt = float(result_file.read_text())
-        print(f"{dt}")
-        logging.info("dt = %s", dt)
-        return dt
+    benchmark_config_path = Path("benchmarks") / benchmark_name / "benchmark_config.toml"
+    assert benchmark_config_path.exists()
 
-def update_measurements(config, analysis_csv):
-    assert False, "Implementation TODO!"
-    # - read analysis_csv into memory
-    # - figure out which analyses haven't been done yet
-    # - do them (randomized)
-    # - append to analysis csv
-    pass
+    runner = _load_runner_from_benchmark_config(benchmark_config_path)
+    dt = runner.run(runner_path)
+    print(dt)
+
+def update_measurements(config, analysis_toml):
+    # Load analysis configuration toml file
+    with open(analysis_toml, "rb") as f:
+        analysis_config = tomllib.load(f)
+
+    validation_errors = []
+
+    commit_to_date_lut = CommitDateLut()  # accelerates date lookups
+
+    # Collect + validate `commits`
+    commits = []
+    for commit_config_entry in analysis_config["commits"]:
+        for expanded_entry in glob.glob(commit_config_entry):
+            commit_hash = Path(expanded_entry).name
+            commit_date = commit_to_date_lut.lookup(config, commit_hash)
+            commit_runner_path = (Path(expanded_entry) / "bin/osimperf2-runner").resolve()
+            if commit_runner_path.exists():
+                commits.append(RunnableCommit(commit_date, commit_hash, commit_runner_path))
+            else:
+                validation_errors.append(f"commits: {commit_runner_path}: does not exist. Maybe you need to run `build-all`?")
+    logging.info("%s commits will be analyzed", len(commits))
+
+    # Collect + validate `benchmarks`
+    benchmark_runners = []
+    for benchmark_config_entry in analysis_config["benchmarks"]:
+        for expanded_entry in glob.glob(benchmark_config_entry):
+            benchmark_config_path = Path(expanded_entry) / "benchmark_config.toml"
+            if benchmark_config_path.exists():
+                benchmark_runners.append(_load_runner_from_benchmark_config(benchmark_config_path))
+            else:
+                validation_errors.append(f"benchmarks: {benchmark_config_path}: does not exist. Add a benchmark configuration file.")
+    logging.info("%s benchmarks will be analyzed", len(benchmark_runners))
+
+    # Read + validate `repeats`
+    repeats = 1
+    if isinstance(analysis_config["repeats"], int) and analysis_config["repeats"] > 0:
+        repeats = analysis_config["repeats"]
+    else:
+        validation_errors.append("repeats: is not a valid configuration value, must be a positive integer")
+    logging.info("%s repeats of each (commit, benchmark) combination will be measured", repeats)
+
+    # Read + validate `result_csv`
+    result_csv_path = Path(analysis_config["result_csv"])
+    existing_measurements = set()
+    if result_csv_path.exists():
+        logging.info("%s already exists, the analysis will skip existing measurements and only append new ones", result_csv_path)
+        with open(result_csv_path, newline='', encoding='utf-8') as result_csv:
+            reader = csv.DictReader(result_csv)
+            for row in reader:
+                assert False, "TODO parse it into a sequence of existing measurements"
+
+    # Exit if there's any validation errors in the analysis configuration
+    if validation_errors:
+        message = f"Validation errors found in {analysis_toml}:\n"
+        for validation_error in validation_errors:
+            message += f"  - {validation_error}\n"
+        raise RuntimeError(message)
+
+    # Calculate complete sequence of measurements that could be taken
+    measurements_to_take = []
+    for commit in commits:
+        for benchmark_runner in benchmark_runners:
+            for repeat in range(0, repeats):
+                measurements_to_take.append(AnalysisPlannedMeasurement(commit, benchmark_runner, repeat))
+
+    csv_fieldnames = ["measurement_time", "commit", "commit_time", "benchmark_name", "repeat_number", "runtime"]
+
+    # Subtract existing results
+    if existing_measurements:
+        result_csv_path.unlink()
+        logging.warning("TODO: subtract existing results from the measurement set")
+
+    if not result_csv_path.exists():
+        # Write CSV header
+        with open(result_csv_path, "wt") as f:
+            writer = csv.DictWriter(f, fieldnames=csv_fieldnames)
+            writer.writeheader()
+
+    # Shuffle measurements that should be taken
+    random.shuffle(measurements_to_take)
+
+    csv_fieldnames = ["measurement_time", "commit", "commit_time", "benchmark_name", "repeat_number", "runtime"]
+
+    for measurement_to_take in measurements_to_take:
+        measurement = measurement_to_take.run()
+        measurement_dict = measurement.to_string_dict()
+
+        logging.info("measurement result = %s", measurement_dict)
+
+        # Append measurement to result file
+        with open(result_csv_path, "a", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=csv_fieldnames)
+            writer.writerow(measurement_dict)
 
 def main():
     config = Config()
@@ -244,26 +458,27 @@ def main():
     subparsers.add_parser("all-commits")          # no args
     subparsers.add_parser("build-all")            # no args
     
-    update_measurements_parser = subparsers.add_parser("update-measurements")
-    update_measurements_parser.add_argument("measurements_csv")
+    full_analysis_parser = subparsers.add_parser("full-analysis")
+    full_analysis_parser.add_argument("measurements_toml")
 
     build_parser = subparsers.add_parser("build")
     build_parser.add_argument("commit")
 
     measure_parser = subparsers.add_parser("measure")
     measure_parser.add_argument("commit")
+    measure_parser.add_argument("benchmark_name")
 
     args = parser.parse_args()
     if args.command == "all-commits":
         all_commits(config)
     elif args.command == "build-all":
         build_all(config)
-    elif args.command == "update-measurements":
-        update_measurements(config, args.measurements_csv)
+    elif args.command == "full-analysis":
+        update_measurements(config, args.measurements_toml)
     elif args.command == "build":
         build(config, args.commit)
     elif args.command == "measure":
-        measure(config, args.commit)
+        measure(config, args.commit, args.benchmark_name)
     else:
         raise RuntimeError("unhandled command detected: probably a developer's fault!")
 
