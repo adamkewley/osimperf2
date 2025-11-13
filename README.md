@@ -26,7 +26,8 @@ git clone https://github.com/opensim-org/opensim-core
 
 # Create local virtual environment (IDEs prefer this)
 python3 -m venv .venv/
-source ./venv/bin/activate # if you plan on running osimperf2 from the calling terminal
+source ./.venv/bin/activate
+pip install -r requirements.txt
 ```
 
 # Usage
