@@ -1,0 +1,5 @@
+type = "run"
+
+[run]
+model = "arm26.osim"
+end_time = 10

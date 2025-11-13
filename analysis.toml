@@ -6,7 +6,14 @@ commits = ["opensim-core_installs/*"]
 
 # A list of benchmarks that should be analyzed against each commit
 # in `commits`
-benchmarks = ["benchmarks/RajagopalDrop"]
+benchmarks = [
+    "benchmarks/Arm26FWD",
+    "benchmarks/RajagopalContact",
+    "benchmarks/RajagopalContactUndamped",
+    "benchmarks/RajagopalDrop",
+    "benchmarks/RajagopalDropUndamped",
+    # "benchmarks/Shoulder"  # broke?
+]
 
 # How many times should a measurement (i.e. a `(commit, benchmark)`
 # combination should be repeated.

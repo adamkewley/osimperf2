@@ -989,7 +989,7 @@
 		<!--Forces in the model (includes Actuators).-->
 		<ForceSet name="forceset">
 			<objects>
-				<Thelen2003Muscle name="TRIlong">
+				<Millard2012EquilibriumMuscle name="TRIlong">
 					<!--Flag indicating whether the force is applied or not. If true the forceis applied to the MultibodySystem otherwise the force is not applied.NOTE: Prior to OpenSim 4.0, this behavior was controlled by the 'isDisabled' property, where 'true' meant that force was not being applied. Thus, if 'isDisabled' is true, then 'appliesForce` is false.-->
 					<appliesForce>true</appliesForce>
 					<!--The path of the actuator which defines length and lengthening speed.-->
@@ -1094,8 +1094,8 @@
 					<activation_time_constant>0.01</activation_time_constant>
 					<!--Deactivation time constant, in seconds-->
 					<deactivation_time_constant>0.040000000000000001</deactivation_time_constant>
-				</Thelen2003Muscle>
-				<Thelen2003Muscle name="TRIlat">
+				</Millard2012EquilibriumMuscle>
+				<Millard2012EquilibriumMuscle name="TRIlat">
 					<!--Flag indicating whether the force is applied or not. If true the forceis applied to the MultibodySystem otherwise the force is not applied.NOTE: Prior to OpenSim 4.0, this behavior was controlled by the 'isDisabled' property, where 'true' meant that force was not being applied. Thus, if 'isDisabled' is true, then 'appliesForce` is false.-->
 					<appliesForce>true</appliesForce>
 					<!--The path of the actuator which defines length and lengthening speed.-->
@@ -1184,8 +1184,8 @@
 					<activation_time_constant>0.01</activation_time_constant>
 					<!--Deactivation time constant, in seconds-->
 					<deactivation_time_constant>0.040000000000000001</deactivation_time_constant>
-				</Thelen2003Muscle>
-				<Thelen2003Muscle name="TRImed">
+				</Millard2012EquilibriumMuscle>
+				<Millard2012EquilibriumMuscle name="TRImed">
 					<!--Flag indicating whether the force is applied or not. If true the forceis applied to the MultibodySystem otherwise the force is not applied.NOTE: Prior to OpenSim 4.0, this behavior was controlled by the 'isDisabled' property, where 'true' meant that force was not being applied. Thus, if 'isDisabled' is true, then 'appliesForce` is false.-->
 					<appliesForce>true</appliesForce>
 					<!--The path of the actuator which defines length and lengthening speed.-->
@@ -1274,8 +1274,8 @@
 					<activation_time_constant>0.01</activation_time_constant>
 					<!--Deactivation time constant, in seconds-->
 					<deactivation_time_constant>0.040000000000000001</deactivation_time_constant>
-				</Thelen2003Muscle>
-				<Thelen2003Muscle name="BIClong">
+				</Millard2012EquilibriumMuscle>
+				<Millard2012EquilibriumMuscle name="BIClong">
 					<!--Flag indicating whether the force is applied or not. If true the forceis applied to the MultibodySystem otherwise the force is not applied.NOTE: Prior to OpenSim 4.0, this behavior was controlled by the 'isDisabled' property, where 'true' meant that force was not being applied. Thus, if 'isDisabled' is true, then 'appliesForce` is false.-->
 					<appliesForce>true</appliesForce>
 					<!--The path of the actuator which defines length and lengthening speed.-->
@@ -1388,8 +1388,8 @@
 					<activation_time_constant>0.01</activation_time_constant>
 					<!--Deactivation time constant, in seconds-->
 					<deactivation_time_constant>0.040000000000000001</deactivation_time_constant>
-				</Thelen2003Muscle>
-				<Thelen2003Muscle name="BICshort">
+				</Millard2012EquilibriumMuscle>
+				<Millard2012EquilibriumMuscle name="BICshort">
 					<!--Flag indicating whether the force is applied or not. If true the forceis applied to the MultibodySystem otherwise the force is not applied.NOTE: Prior to OpenSim 4.0, this behavior was controlled by the 'isDisabled' property, where 'true' meant that force was not being applied. Thus, if 'isDisabled' is true, then 'appliesForce` is false.-->
 					<appliesForce>true</appliesForce>
 					<!--The path of the actuator which defines length and lengthening speed.-->
@@ -1475,8 +1475,8 @@
 					<activation_time_constant>0.01</activation_time_constant>
 					<!--Deactivation time constant, in seconds-->
 					<deactivation_time_constant>0.040000000000000001</deactivation_time_constant>
-				</Thelen2003Muscle>
-				<Thelen2003Muscle name="BRA">
+				</Millard2012EquilibriumMuscle>
+				<Millard2012EquilibriumMuscle name="BRA">
 					<!--Flag indicating whether the force is applied or not. If true the forceis applied to the MultibodySystem otherwise the force is not applied.NOTE: Prior to OpenSim 4.0, this behavior was controlled by the 'isDisabled' property, where 'true' meant that force was not being applied. Thus, if 'isDisabled' is true, then 'appliesForce` is false.-->
 					<appliesForce>true</appliesForce>
 					<!--The path of the actuator which defines length and lengthening speed.-->
@@ -1547,7 +1547,7 @@
 					<activation_time_constant>0.01</activation_time_constant>
 					<!--Deactivation time constant, in seconds-->
 					<deactivation_time_constant>0.040000000000000001</deactivation_time_constant>
-				</Thelen2003Muscle>
+				</Millard2012EquilibriumMuscle>
 			</objects>
 			<groups />
 		</ForceSet>

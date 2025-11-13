@@ -5101,12 +5101,12 @@
 		<!--Controllers that provide the control inputs for Actuators.-->
 		<ControllerSet name="controllerset">
 			<objects>
+			    <!-- osimperf2: not available in older OpenSim builds
 				<ToyReflexController name="ToyReflexController">
-					<!--Paths to Components that satisfies the list Socket 'actuators' of type Actuator (description: The list of Actuators that this controller will control.).To specify multiple paths, put spaces between them.-->
 					<socket_actuators>/forceset/addbrev_r /forceset/addlong_r /forceset/addmagDist_r /forceset/addmagIsch_r /forceset/addmagMid_r /forceset/addmagProx_r /forceset/bflh_r /forceset/bfsh_r /forceset/edl_r /forceset/ehl_r /forceset/fdl_r /forceset/fhl_r /forceset/gaslat_r /forceset/gasmed_r /forceset/glmax1_r /forceset/glmax2_r /forceset/glmax3_r /forceset/glmed1_r /forceset/glmed2_r /forceset/glmed3_r /forceset/glmin1_r /forceset/glmin2_r /forceset/glmin3_r /forceset/grac_r /forceset/iliacus_r /forceset/perbrev_r /forceset/perlong_r /forceset/piri_r /forceset/psoas_r /forceset/recfem_r /forceset/sart_r /forceset/semimem_r /forceset/semiten_r /forceset/soleus_r /forceset/tfl_r /forceset/tibant_r /forceset/tibpost_r /forceset/vasint_r /forceset/vaslat_r /forceset/vasmed_r /forceset/addbrev_l /forceset/addlong_l /forceset/addmagDist_l /forceset/addmagIsch_l /forceset/addmagMid_l /forceset/addmagProx_l /forceset/bflh_l /forceset/bfsh_l /forceset/edl_l /forceset/ehl_l /forceset/fdl_l /forceset/fhl_l /forceset/gaslat_l /forceset/gasmed_l /forceset/glmax1_l /forceset/glmax2_l /forceset/glmax3_l /forceset/glmed1_l /forceset/glmed2_l /forceset/glmed3_l /forceset/glmin1_l /forceset/glmin2_l /forceset/glmin3_l /forceset/grac_l /forceset/iliacus_l /forceset/perbrev_l /forceset/perlong_l /forceset/piri_l /forceset/psoas_l /forceset/recfem_l /forceset/sart_l /forceset/semimem_l /forceset/semiten_l /forceset/soleus_l /forceset/tfl_l /forceset/tibant_l /forceset/tibpost_l /forceset/vasint_l /forceset/vaslat_l /forceset/vasmed_l</socket_actuators>
-					<!--Factor by which the stretch reflex is scaled.-->
 					<gain>2</gain>
 				</ToyReflexController>
+				-->
 			</objects>
 			<groups />
 		</ControllerSet>

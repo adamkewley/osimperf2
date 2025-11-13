@@ -1,0 +1,5 @@
+type = "run"
+
+[run]
+model = "TestShoulderWrapping.osim"
+end_time = 0.5

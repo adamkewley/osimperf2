@@ -16,6 +16,8 @@ import shutil
 import subprocess
 import random
 
+# valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes --cache-sim=yes --branch-sim=yes --callgrind-out-file="$WORKSPACE/RajagopalDrop-grind.out"
+
 def _load_broken_commits():
     broken_commits_path = "broken-commits.txt"
 
@@ -151,6 +153,14 @@ class AnalysisPlannedMeasurement:
 
     def __repr__(self):
         return pprint.pformat(vars(self))
+
+    def __eq__(self, rhs):
+        if isinstance(rhs, AnalysisPlannedMeasurement):
+            return (self.commit.commit, self.benchmark_runner.name, self.run_id) == (rhs.commit.commit, rhs.benchmark_runner.name, rhs.run_id)
+        return NotImplemented
+
+    def __hash__(self):
+        return hash((self.commit.commit, self.benchmark_runner.name, self.run_id))
 
     def run(self):
         measurement_time = datetime.now(timezone.utc)
@@ -355,7 +365,7 @@ def measure(config, commit, benchmark_name):
     dt = runner.run(runner_path)
     print(dt)
 
-def update_measurements(config, analysis_toml):
+def full_analysis(config, analysis_toml):
     # Load analysis configuration toml file
     with open(analysis_toml, "rb") as f:
         analysis_config = tomllib.load(f)
@@ -375,7 +385,6 @@ def update_measurements(config, analysis_toml):
                 commits.append(RunnableCommit(commit_date, commit_hash, commit_runner_path))
             else:
                 validation_errors.append(f"commits: {commit_runner_path}: does not exist. Maybe you need to run `build-all`?")
-    logging.info("%s commits will be analyzed", len(commits))
 
     # Collect + validate `benchmarks`
     benchmark_runners = []
@@ -386,7 +395,6 @@ def update_measurements(config, analysis_toml):
                 benchmark_runners.append(_load_runner_from_benchmark_config(benchmark_config_path))
             else:
                 validation_errors.append(f"benchmarks: {benchmark_config_path}: does not exist. Add a benchmark configuration file.")
-    logging.info("%s benchmarks will be analyzed", len(benchmark_runners))
 
     # Read + validate `repeats`
     repeats = 1
@@ -394,17 +402,18 @@ def update_measurements(config, analysis_toml):
         repeats = analysis_config["repeats"]
     else:
         validation_errors.append("repeats: is not a valid configuration value, must be a positive integer")
-    logging.info("%s repeats of each (commit, benchmark) combination will be measured", repeats)
+
+    logging.info("%s commits, %s benchmarks, and %s repeats will be analyzed (total combinations = %s)", len(commits), len(benchmark_runners), repeats,  len(commits)*len(benchmark_runners)*repeats)
 
     # Read + validate `result_csv`
     result_csv_path = Path(analysis_config["result_csv"])
     existing_measurements = set()
     if result_csv_path.exists():
-        logging.info("%s already exists, the analysis will skip existing measurements and only append new ones", result_csv_path)
+        logging.info("%s already exists, so some measurements may be skipped", result_csv_path)
         with open(result_csv_path, newline='', encoding='utf-8') as result_csv:
             reader = csv.DictReader(result_csv)
             for row in reader:
-                assert False, "TODO parse it into a sequence of existing measurements"
+                existing_measurements.add((row["commit"], row["benchmark_name"], row["repeat_number"]))
 
     # Exit if there's any validation errors in the analysis configuration
     if validation_errors:
@@ -415,31 +424,39 @@ def update_measurements(config, analysis_toml):
 
     # Calculate complete sequence of measurements that could be taken
     measurements_to_take = []
+    num_skipped_measurements = 0
     for commit in commits:
         for benchmark_runner in benchmark_runners:
             for repeat in range(0, repeats):
-                measurements_to_take.append(AnalysisPlannedMeasurement(commit, benchmark_runner, repeat))
+                entry_to_check = (commit.commit, benchmark_runner.name, str(repeat))
+                if entry_to_check not in existing_measurements:
+                    measurements_to_take.append(AnalysisPlannedMeasurement(commit, benchmark_runner, repeat))
+                    logging.debug("add %s", entry_to_check)
+                else:
+                    num_skipped_measurements += 1
+                    logging.debug("skip %s", entry_to_check)
 
+    logging.info("%s measurements will be made (%s already in %s)", len(measurements_to_take), num_skipped_measurements, result_csv_path)
+
+    # Shuffle measurements that should be taken
+    logging.info("shuffling measurements")
+    random.shuffle(measurements_to_take)
+
+    # Write result header (if creating a new result file)
     csv_fieldnames = ["measurement_time", "commit", "commit_time", "benchmark_name", "repeat_number", "runtime"]
-
-    # Subtract existing results
-    if existing_measurements:
-        result_csv_path.unlink()
-        logging.warning("TODO: subtract existing results from the measurement set")
-
     if not result_csv_path.exists():
         # Write CSV header
         with open(result_csv_path, "wt") as f:
             writer = csv.DictWriter(f, fieldnames=csv_fieldnames)
             writer.writeheader()
 
-    # Shuffle measurements that should be taken
-    random.shuffle(measurements_to_take)
-
-    csv_fieldnames = ["measurement_time", "commit", "commit_time", "benchmark_name", "repeat_number", "runtime"]
-
     for measurement_to_take in measurements_to_take:
-        measurement = measurement_to_take.run()
+        try:
+            measurement = measurement_to_take.run()
+        except Exception as ex:
+            with open("errors.txt", "a", encoding="utf-8") as f:
+                f.write(f"Error recording {measurement_to_take}: {ex}, skipping")
+            continue
         measurement_dict = measurement.to_string_dict()
 
         logging.info("measurement result = %s", measurement_dict)
@@ -448,6 +465,17 @@ def update_measurements(config, analysis_toml):
         with open(result_csv_path, "a", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=csv_fieldnames)
             writer.writerow(measurement_dict)
+
+def plot_benchmark(config : Config, result_csv_path, benchmark_name):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    df = pd.read_csv(result_csv_path)
+    df = df[df["benchmark_name"] == benchmark_name]                  # filter by benchmark
+    df["commit_time"] = pd.to_datetime(df["commit_time"], unit="s")  # parse unix timestamps
+    agg = df.groupby("commit_time")["runtime"].agg(["mean", "std"])
+    plt.errorbar(x=agg.index, y=agg["mean"], yerr=agg["std"], fmt="o")
+    plt.savefig("timeseries.png", dpi=300, bbox_inches="tight")
 
 def main():
     config = Config()
@@ -469,17 +497,23 @@ def main():
     measure_parser.add_argument("commit")
     measure_parser.add_argument("benchmark_name")
 
+    plot_benchmark_parser = subparsers.add_parser("plot-benchmark")
+    plot_benchmark_parser.add_argument("result_csv_path")
+    plot_benchmark_parser.add_argument("benchmark_name")
+
     args = parser.parse_args()
     if args.command == "all-commits":
         all_commits(config)
     elif args.command == "build-all":
         build_all(config)
     elif args.command == "full-analysis":
-        update_measurements(config, args.measurements_toml)
+        full_analysis(config, args.measurements_toml)
     elif args.command == "build":
         build(config, args.commit)
     elif args.command == "measure":
         measure(config, args.commit, args.benchmark_name)
+    elif args.command == "plot-benchmark":
+        plot_benchmark(config, args.result_csv_path, args.benchmark_name)
     else:
         raise RuntimeError("unhandled command detected: probably a developer's fault!")
 
