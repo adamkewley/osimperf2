@@ -16,6 +16,9 @@ import shutil
 import subprocess
 import random
 
+import pandas as pd
+import matplotlib.pyplot as plt
+
 # valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes --cache-sim=yes --branch-sim=yes --callgrind-out-file="$WORKSPACE/RajagopalDrop-grind.out"
 
 def _load_broken_commits():
@@ -466,16 +469,113 @@ def full_analysis(config, analysis_toml):
             writer = csv.DictWriter(f, fieldnames=csv_fieldnames)
             writer.writerow(measurement_dict)
 
-def plot_benchmark(config : Config, result_csv_path, benchmark_name):
-    import pandas as pd
-    import matplotlib.pyplot as plt
+def _draw_fig_overlays(events, agg, ax):
+    for event in events:
+        x0 = event["time"]
 
+        # Y should try to be close to a datapoint
+        closest_x = agg.index.get_indexer([x0], method="pad")
+        closest_x = agg.index[closest_x][0]
+        y0 = agg.loc[closest_x, "mean"]
+
+        annotation_y = y0
+        yoffset = 0
+        if event.get("yattop"):
+            annotation_y = ax.get_ylim()[1]
+            yoffset = -9
+        if event.get("yatbot"):
+            annotation_y = ax.get_ylim()[0]
+            yoffset = 2
+
+        # Draw vertical line
+        if event.get("drawline"):
+            ys = [y0, annotation_y]
+            ax.plot([x0, x0], [y0, annotation_y], linestyle="--", linewidth=1, color="lightgrey")
+            #ax.axvline(x=x0, linestyle="--", linewidth=1, color="lightgrey")
+        # Draw annotation
+        ax.annotate(
+            event["label"],
+            xy=(x0, annotation_y),
+            xytext=(1, yoffset),  # offset in points
+            textcoords="offset points",
+            fontsize=9
+        )
+
+def plot_figure1(config : Config, result_csv_path, output_image_path):
+    benchmark_name = "RajagopalDropUndamped"
+
+    # These are significant events w.r.t. the profiler-led (i.e. traditional) performance improvements
+    significant_events = [
+        {"time": pd.to_datetime("2020-05-01"), "label": "Project Start", "yattop": True, "drawline": True},
+        {"time": pd.to_datetime("2020-06-23"), "label": "#2806: Cache controllers"},
+        {"time": pd.to_datetime("2020-07-23"), "label": "#2837: Optimize cache variables"},
+        {"time": pd.to_datetime("2020-12-18"), "label": "#2908: Reduce string construction"},
+        {"time": pd.to_datetime("2022-02-03"), "label": "#3125: Tweak wrap cylinder calculations"},
+        {"time": pd.to_datetime("2023-05-16"), "label": "#3442: Deduplicate muscle curves"},
+        {"time": pd.to_datetime("2024-01-01"), "label": "#3653: Calculate value & derivative"},
+        {"time": pd.to_datetime("2024-03-19"), "label": "#3745: (regression)", "yatbot": True, "drawline": True},
+        {"time": pd.to_datetime("2024-07-14"), "label": "#3782: ComponentPath Optimization"},
+        {"time": pd.to_datetime("2025-10-01"), "label": "Project End", "yattop": True, "drawline": True},
+    ]
+
+    # Handle data
     df = pd.read_csv(result_csv_path)
     df = df[df["benchmark_name"] == benchmark_name]                  # filter by benchmark
     df["commit_time"] = pd.to_datetime(df["commit_time"], unit="s")  # parse unix timestamps
     agg = df.groupby("commit_time")["runtime"].agg(["mean", "std"])
-    plt.errorbar(x=agg.index, y=agg["mean"], yerr=agg["std"], fmt="o")
-    plt.savefig("timeseries.png", dpi=300, bbox_inches="tight")
+
+    # Create top-level figure
+    fig, ax = plt.subplots()
+    fig.suptitle("Profiler-Led Optimizations Doubled Simulation Performance")
+
+    # Create plot
+    ax.errorbar(x=agg.index, y=agg["mean"], yerr=agg["std"], fmt="o")
+    ax.set_xlabel("Commit Date on OpenSim-Core")
+    ax.set_ylabel("Mean Runtime [seconds]")
+    ax.set_title(f"Rajagopal2015.osim, Forward Dynamic Simulation (2 seconds simulation time)", fontsize=9)
+
+    # Draw overlays over the plot
+    _draw_fig_overlays(significant_events, agg, ax)
+
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight")
+
+def plot_figure2(config : Config, result_csv_path, output_image_path):
+    original_model_benchmark = "RajagopalDropUndamped"
+    fixed_model_benchmark = "RajagopalDrop"
+
+    # These are significant events w.r.t. identifying model bottlenecks
+    significant_events = [
+        {"time": pd.to_datetime("2020-05-01"), "label": "Project Start", "yattop": True, "drawline": True},
+        {"time": pd.to_datetime("2023-10-24"), "label": "Model Parameters Fixed (opensim-models/#160)"},
+        {"time": pd.to_datetime("2025-10-01"), "label": "Project End", "yattop": True, "drawline": True},
+    ]
+
+    # Handle original data
+    df_original = pd.read_csv(result_csv_path)
+    df_original = df_original[df_original["benchmark_name"] == original_model_benchmark]  # filter by benchmark
+    df_original["commit_time"] = pd.to_datetime(df_original["commit_time"], unit="s")     # parse unix timestamps
+    agg_original = df_original.groupby("commit_time")["runtime"].agg(["mean", "std"])
+
+    # Handle fixed (dampened) data
+    df_fixed = pd.read_csv(result_csv_path)
+    df_fixed = df_fixed[df_fixed["benchmark_name"] == fixed_model_benchmark]  # filter by benchmark
+    df_fixed["commit_time"] = pd.to_datetime(df_fixed["commit_time"], unit="s")     # parse unix timestamps
+    agg_fixed = df_fixed.groupby("commit_time")["runtime"].agg(["mean", "std"])
+
+    # Create top-level figure
+    fig, ax = plt.subplots()
+    fig.suptitle("Being Able to Identify Model Bottlenecks Tripled Simulation Performance")
+
+    # Create plot
+    ax.errorbar(x=agg_original.index, y=agg_original["mean"], yerr=agg_original["std"], fmt="o")
+    ax.errorbar(x=agg_fixed.index, y=agg_fixed["mean"], yerr=agg_fixed["std"], fmt="o")
+    ax.set_xlabel("Commit Date on OpenSim-Core")
+    ax.set_ylabel("Mean Runtime [seconds]")
+    ax.set_title(f"Forward Dynamic Simulation (2 seconds simulation time)", fontsize=9)
+
+    _draw_fig_overlays(significant_events, agg_fixed, ax)
+
+    plt.savefig(output_image_path, dpi=300, bbox_inches="tight")
 
 def main():
     config = Config()
@@ -497,9 +597,13 @@ def main():
     measure_parser.add_argument("commit")
     measure_parser.add_argument("benchmark_name")
 
-    plot_benchmark_parser = subparsers.add_parser("plot-benchmark")
-    plot_benchmark_parser.add_argument("result_csv_path")
-    plot_benchmark_parser.add_argument("benchmark_name")
+    plot_figure1_parser = subparsers.add_parser("plot-figure1")
+    plot_figure1_parser.add_argument("result_csv_path")
+    plot_figure1_parser.add_argument("output_image_path")
+
+    plot_figure2_parser = subparsers.add_parser("plot-figure2")
+    plot_figure2_parser.add_argument("result_csv_path")
+    plot_figure2_parser.add_argument("output_image_path")
 
     args = parser.parse_args()
     if args.command == "all-commits":
@@ -512,8 +616,10 @@ def main():
         build(config, args.commit)
     elif args.command == "measure":
         measure(config, args.commit, args.benchmark_name)
-    elif args.command == "plot-benchmark":
-        plot_benchmark(config, args.result_csv_path, args.benchmark_name)
+    elif args.command == "plot-figure1":
+        plot_figure1(config, args.result_csv_path, args.output_image_path)
+    elif args.command == "plot-figure2":
+        plot_figure2(config, args.result_csv_path, args.output_image_path)
     else:
         raise RuntimeError("unhandled command detected: probably a developer's fault!")
 

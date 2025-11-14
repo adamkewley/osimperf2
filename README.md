@@ -49,6 +49,12 @@ pip install -r requirements.txt
 
 # performs a "full analysis" (see analysis.toml - this is what generates plot data)
 ./osimperf2 full-analysis analysis.toml
+
+# renders figure 1 to `figure1.png` (Profiler-Led Optimizations Doubled Simulation Performance...)
+./osimperf2 plot-figure-1 full_analysis_results.csv figure1.png
+
+# renders figure 1 to `figure1.png` (Profiler-Led Optimizations Doubled Simulation Performance...)
+./osimperf2 plot-figure-2 full_analysis_results.csv figure2.png
 ```
 
 # C++ Development Environment Setup
