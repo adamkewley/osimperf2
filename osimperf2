@@ -526,7 +526,7 @@ def plot_figure1(config : Config, result_csv_path, output_image_path):
 
     # Create top-level figure
     fig, ax = plt.subplots()
-    fig.suptitle("Profiler-Led Optimizations Doubled Simulation Performance")
+    fig.suptitle("Profiler-Led Code Optimizations Doubled Simulation Performance")
 
     # Create plot
     ax.errorbar(x=agg.index, y=agg["mean"], yerr=agg["std"], fmt="o")
@@ -546,7 +546,7 @@ def plot_figure2(config : Config, result_csv_path, output_image_path):
     # These are significant events w.r.t. identifying model bottlenecks
     significant_events = [
         {"time": pd.to_datetime("2020-05-01"), "label": "Project Start", "yattop": True, "drawline": True},
-        {"time": pd.to_datetime("2023-10-24"), "label": "Model Parameters Fixed (opensim-models/#160)"},
+        {"time": pd.to_datetime("2023-10-24"), "label": "Model Bottleneck Identified"},
         {"time": pd.to_datetime("2025-10-01"), "label": "Project End", "yattop": True, "drawline": True},
     ]
 
@@ -560,11 +560,12 @@ def plot_figure2(config : Config, result_csv_path, output_image_path):
     df_fixed = pd.read_csv(result_csv_path)
     df_fixed = df_fixed[df_fixed["benchmark_name"] == fixed_model_benchmark]  # filter by benchmark
     df_fixed["commit_time"] = pd.to_datetime(df_fixed["commit_time"], unit="s")     # parse unix timestamps
+    df_fixed = df_fixed[df_fixed["commit_time"] >= pd.to_datetime("2023-10-24")]
     agg_fixed = df_fixed.groupby("commit_time")["runtime"].agg(["mean", "std"])
 
     # Create top-level figure
     fig, ax = plt.subplots()
-    fig.suptitle("Being Able to Identify Model Bottlenecks Tripled Simulation Performance")
+    fig.suptitle("Identifying Model Bottlenecks Tripled Simulation Performance")
 
     # Create plot
     ax.errorbar(x=agg_original.index, y=agg_original["mean"], yerr=agg_original["std"], fmt="o")
