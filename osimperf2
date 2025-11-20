@@ -455,7 +455,7 @@ def full_analysis(config, analysis_toml):
                     num_skipped_measurements += 1
                     logging.debug("skip %s", entry_to_check)
 
-    logging.info("%s measurements will be made (%s already in %s)", len(measurements_to_take), num_skipped_measurements, result_csv_path)
+    logging.info("%s measurements will be made (%s already made/errored %s)", len(measurements_to_take), num_skipped_measurements)
 
     # Shuffle measurements that should be taken
     logging.info("shuffling measurements")
