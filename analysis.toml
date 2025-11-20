@@ -8,6 +8,7 @@ commits = ["opensim-core_installs/*"]
 # in `commits`
 benchmarks = [
     "benchmarks/Arm26FWD",
+    "benchmarks/Arm26FWD_Scholz",
     "benchmarks/RajagopalContact",
     "benchmarks/RajagopalContactUndamped",
     "benchmarks/RajagopalDrop",
@@ -25,3 +26,9 @@ repeats = 8
 # a measurement is already in the results CSV it won't measure it (clean it out
 # if you want new measurements
 result_csv = "full_analysis_results.csv"
+
+# Path to the errors CSV
+#
+# This lets the analysis script figure out which measurements to skip when
+# it's re-ran
+error_csv = "full_analysis_errors.csv"

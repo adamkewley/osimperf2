@@ -165,6 +165,13 @@ class AnalysisPlannedMeasurement:
     def __hash__(self):
         return hash((self.commit.commit, self.benchmark_runner.name, self.run_id))
 
+    def to_string_dict(self):
+        return {
+            "commit": self.commit.commit,
+            "benchmark_name": self.benchmark_runner.name,
+            "repeat_number": self.run_id,
+        }
+
     def run(self):
         measurement_time = datetime.now(timezone.utc)
         dt = self.benchmark_runner.run(self.commit.runner_path)
@@ -413,8 +420,17 @@ def full_analysis(config, analysis_toml):
     existing_measurements = set()
     if result_csv_path.exists():
         logging.info("%s already exists, so some measurements may be skipped", result_csv_path)
-        with open(result_csv_path, newline='', encoding='utf-8') as result_csv:
+        with open(result_csv_path, newline="", encoding="utf-8") as result_csv:
             reader = csv.DictReader(result_csv)
+            for row in reader:
+                existing_measurements.add((row["commit"], row["benchmark_name"], row["repeat_number"]))
+
+    # Read + validate `error_csv`
+    error_csv_path = Path(analysis_config["error_csv"])
+    if error_csv_path.exists():
+        logging.info("%s already exists, so some known-to-be-broken measurements may be skipped", error_csv_path)
+        with open(error_csv_path, newline="", encoding="utf-8") as error_csv:
+            reader = csv.DictReader(error_csv)
             for row in reader:
                 existing_measurements.add((row["commit"], row["benchmark_name"], row["repeat_number"]))
 
@@ -426,7 +442,7 @@ def full_analysis(config, analysis_toml):
         raise RuntimeError(message)
 
     # Calculate complete sequence of measurements that could be taken
-    measurements_to_take = []
+    measurements_to_take : list[AnalysisPlannedMeasurement]  = []
     num_skipped_measurements = 0
     for commit in commits:
         for benchmark_runner in benchmark_runners:
@@ -446,19 +462,31 @@ def full_analysis(config, analysis_toml):
     random.shuffle(measurements_to_take)
 
     # Write result header (if creating a new result file)
-    csv_fieldnames = ["measurement_time", "commit", "commit_time", "benchmark_name", "repeat_number", "runtime"]
+    result_csv_fieldnames = ["measurement_time", "commit", "commit_time", "benchmark_name", "repeat_number", "runtime"]
     if not result_csv_path.exists():
         # Write CSV header
         with open(result_csv_path, "wt") as f:
-            writer = csv.DictWriter(f, fieldnames=csv_fieldnames)
+            writer = csv.DictWriter(f, fieldnames=result_csv_fieldnames)
+            writer.writeheader()
+
+    # Write error header (if creating a new error file)
+    error_csv_fieldnames = ["commit", "benchmark_name", "repeat_number"]
+    if not error_csv_path.exists():
+        # Write CSV header
+        with open(error_csv_path, "wt") as f:
+            writer = csv.DictWriter(f, fieldnames=error_csv_fieldnames)
             writer.writeheader()
 
     for measurement_to_take in measurements_to_take:
         try:
             measurement = measurement_to_take.run()
         except Exception as ex:
-            with open("errors.txt", "a", encoding="utf-8") as f:
-                f.write(f"Error recording {measurement_to_take}: {ex}, skipping")
+            logging.error(f"error taking measurement: {ex}: appending this error to {error_csv_path}")
+
+            # Append error to error CSV (to prevent re-runs)
+            with open(error_csv_path, "a", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=error_csv_fieldnames)
+                writer.writerow(measurement_to_take.to_string_dict())
             continue
         measurement_dict = measurement.to_string_dict()
 
@@ -466,7 +494,7 @@ def full_analysis(config, analysis_toml):
 
         # Append measurement to result file
         with open(result_csv_path, "a", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=csv_fieldnames)
+            writer = csv.DictWriter(f, fieldnames=result_csv_fieldnames)
             writer.writerow(measurement_dict)
 
 def _draw_fig_overlays(events, agg, ax):
