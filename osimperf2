@@ -500,29 +500,33 @@ def full_analysis(config, analysis_toml):
             writer = csv.DictWriter(f, fieldnames=result_csv_fieldnames)
             writer.writerow(measurement_dict)
 
-def _draw_fig_overlays(events, agg, ax):
-    for event in events:
-        x0 = event["time"]
+def _draw_fig_event_overlays(i, event, agg, ax):
+    x0 = event["time"]
 
-        # Y should try to be close to a datapoint
-        closest_x = agg.index.get_indexer([x0], method="pad")
-        closest_x = agg.index[closest_x][0]
-        y0 = agg.loc[closest_x, "mean"]
+    # Y should try to be close to a datapoint
+    closest_x = agg.index.get_indexer([x0], method="pad")
+    closest_x = agg.index[closest_x][0]
+    y0 = agg.loc[closest_x, "mean"]
 
-        annotation_y = y0
-        yoffset = 0
-        if event.get("yattop"):
-            annotation_y = ax.get_ylim()[1]
-            yoffset = -9
-        if event.get("yatbot"):
-            annotation_y = ax.get_ylim()[0]
-            yoffset = 2
+    annotation_y = y0
+    yoffset = 0
+    if event.get("yattop"):
+        annotation_y = ax.get_ylim()[1]
+        yoffset = -9
+    if event.get("yatbot"):
+        annotation_y = ax.get_ylim()[0]
+        yoffset = 2
 
-        # Draw vertical line
-        if event.get("drawline"):
-            ys = [y0, annotation_y]
-            ax.plot([x0, x0], [y0, annotation_y], linestyle="--", linewidth=1, color="lightgrey")
-            #ax.axvline(x=x0, linestyle="--", linewidth=1, color="lightgrey")
+    # Draw vertical line
+    if event.get("drawline", False):
+        ys = [y0, annotation_y]
+        #ax.plot([x0, x0], [y0, annotation_y], linestyle="--", linewidth=1, color="lightgrey")
+        ax.axvline(x=x0, linestyle="--", linewidth=1, color="lightgrey")
+
+        # Put a letter annotation above the line
+        ax.annotate(chr(ord("a") + i), xy=(x0, ax.get_ylim()[1]), fontsize=9, ha="center", va="bottom")
+
+    if event.get("draw_annotation", False):
         # Draw annotation
         ax.annotate(
             event["label"],
@@ -532,20 +536,31 @@ def _draw_fig_overlays(events, agg, ax):
             fontsize=9
         )
 
+def _draw_fig_overlays(events, agg, ax):
+    # Draw individual overlays
+    for i in range(0, len(events)):
+        _draw_fig_event_overlays(i, events[i], agg, ax)
+
+    # Draw shared overlays
+    leftmost_line = next((e for e in events if e.get("drawline")), None)
+    if leftmost_line:
+        x0 = leftmost_line["time"]
+        ax.annotate("events:", xy=(x0, ax.get_ylim()[1]), xytext=(-6, 0), textcoords="offset points", fontsize=9, ha="right", va="bottom")
+
 def plot_figure1(config : Config, result_csv_path, output_image_path):
     benchmark_name = "RajagopalDropUndamped"
 
     # These are significant events w.r.t. the profiler-led (i.e. traditional) performance improvements
     significant_events = [
         {"time": pd.to_datetime("2020-05-01"), "label": "Project Start", "yattop": True, "drawline": True},
-        {"time": pd.to_datetime("2020-06-23"), "label": "#2806: Cache controllers"},
-        {"time": pd.to_datetime("2020-07-23"), "label": "#2837: Optimize cache variables"},
-        {"time": pd.to_datetime("2020-12-18"), "label": "#2908: Reduce string construction"},
-        {"time": pd.to_datetime("2022-02-03"), "label": "#3125: Tweak wrap cylinder calculations"},
-        {"time": pd.to_datetime("2023-05-16"), "label": "#3442: Deduplicate muscle curves"},
-        {"time": pd.to_datetime("2024-01-01"), "label": "#3653: Calculate value & derivative"},
+        # {"time": pd.to_datetime("2020-06-23"), "label": "#2806: Cache controllers", "drawline": True},
+        {"time": pd.to_datetime("2020-07-23"), "label": "#2837: Optimize cache variables", "drawline": True},
+        {"time": pd.to_datetime("2020-12-18"), "label": "#2908: Reduce string construction", "drawline": True},
+        {"time": pd.to_datetime("2022-02-03"), "label": "#3125: Tweak wrap cylinder calculations", "drawline": True},
+        {"time": pd.to_datetime("2023-05-16"), "label": "#3442: Deduplicate muscle curves", "drawline": True},
+        {"time": pd.to_datetime("2024-01-01"), "label": "#3653: Calculate value & derivative", "drawline": True},
         {"time": pd.to_datetime("2024-03-19"), "label": "#3745: (regression)", "yatbot": True, "drawline": True},
-        {"time": pd.to_datetime("2024-07-14"), "label": "#3782: ComponentPath Optimization"},
+        {"time": pd.to_datetime("2024-07-14"), "label": "#3782: ComponentPath Optimization", "drawline": True},
         {"time": pd.to_datetime("2025-10-01"), "label": "Project End", "yattop": True, "drawline": True},
     ]
 
@@ -556,14 +571,14 @@ def plot_figure1(config : Config, result_csv_path, output_image_path):
     agg = df.groupby("commit_time")["runtime"].agg(["mean", "std"])
 
     # Create top-level figure
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(constrained_layout=True)
     fig.suptitle("Profiler-Led Code Optimizations Doubled Simulation Performance")
+    fig.set_constrained_layout_pads(h_pad=0.025)  # Increase padding between subtitle and figure title to account for the subtitle padding
 
-    # Create plot
     ax.errorbar(x=agg.index, y=agg["mean"], yerr=agg["std"], fmt="o")
     ax.set_xlabel("Commit Date on OpenSim-Core")
     ax.set_ylabel("Mean Runtime [seconds]")
-    ax.set_title(f"Rajagopal2015.osim, Forward Dynamic Simulation (2 seconds simulation time)", fontsize=9)
+    ax.set_title(f"Rajagopal2015.osim, Forward Dynamic Simulation (2 seconds simulation time)", fontsize=9, pad=15)
 
     # Draw overlays over the plot
     _draw_fig_overlays(significant_events, agg, ax)
